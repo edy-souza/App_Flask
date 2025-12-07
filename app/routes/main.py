@@ -1,4 +1,6 @@
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
+from app.modelos.user import LoginPayLoad
+from pydantic import ValidationError
 '''
 Blueprint é uma forma de organizar rotas em módulos separados dentro do projeto Flask.
 Serve para deixar o código mais limpo e dividido por partes.
@@ -9,7 +11,16 @@ main_bp = Blueprint('main_bp', __name__)
 # RF: O sistema deve permitir que um usuário se autentique para obter um TOKEN
 @main_bp.route('/login', methods=['POST'])
 def login():
-    return jsonify({'mensagem' : 'Realizar o login!'})
+    try:
+        raw_data = request.get_json()
+        user_data = LoginPayLoad(**raw_data)
+    
+    except ValidationError as e:
+        return jsonify({'error' : e.errors()}), 400
+    except Exception as e:
+        jsonify({'error' : 'Erro durante a requisição do dado'}), 500
+        
+    return jsonify({'mensagem' : f'Realizar o login do usuário {user_data.model_dump_json()}'})
 
 # RF :O sistema deve permitir listagem de todos os produtos
 @main_bp.route('/products', methods=['GET'])

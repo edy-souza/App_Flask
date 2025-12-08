@@ -19,8 +19,12 @@ def login():
         return jsonify({'error' : e.errors()}), 400
     except Exception as e:
         jsonify({'error' : 'Erro durante a requisição do dado'}), 500
+    
+    if user_data.username == 'admin' and user_data.password == '1234':
+        return jsonify({'mensagem' : 'Login bem-sucedido!'})
+    else:
+        return jsonify({'mensagem' : 'Credenciais Inválidas!'})
         
-    return jsonify({'mensagem' : f'Realizar o login do usuário {user_data.model_dump_json()}'})
 
 # RF :O sistema deve permitir listagem de todos os produtos
 @main_bp.route('/products', methods=['GET'])

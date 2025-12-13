@@ -1,6 +1,10 @@
 from flask import Blueprint, jsonify, request
 from app.modelos.user import LoginPayLoad
 from pydantic import ValidationError
+from app import db
+from bson import ObjectId
+from app.modelos.products import *
+
 '''
 Blueprint é uma forma de organizar rotas em módulos separados dentro do projeto Flask.
 Serve para deixar o código mais limpo e dividido por partes.
@@ -29,7 +33,10 @@ def login():
 # RF :O sistema deve permitir listagem de todos os produtos
 @main_bp.route('/products', methods=['GET'])
 def get_products():
-    return jsonify({'mensagem' : 'Está é a rota de listagem dos produtos'})
+    products_cursor = db.products.find({})
+    products_list = [ProductDBModel(**product).model_dump(by_alias=True, exclude_none=True) for product in products_cursor]
+    
+    return jsonify(products_list)
 
 # RF: O sistema deve permitir a criação de um novo produto
 @main_bp.route('/products', methods=['POST'])
@@ -37,9 +44,20 @@ def create_products():
     return jsonify({'mensagem' : 'Está é a rota de criação de produtos'})
 
 # RF: O sistema deve permitir a visualização dos detalhes de um único produto
-@main_bp.route('/product/<int:product_id>', methods=['GET'])
+@main_bp.route('/product/<string:product_id>', methods=['GET'])
 def get_product_by_id(product_id):
-    return jsonify({'mensagem' : f'Está é a rota de visualização do detalhe do id do produto {product_id}'})
+    try:
+        oid = ObjectId(product_id)
+    except Exception as e:
+        return jsonify({'error' : f'Erro ao transformar  {product_id} em ObjectID: {e}'})
+    
+    product = db.products.find_one({'_id':oid})
+    
+    if product:
+        product['_id'] = str(product['_id'] )
+        return jsonify(product)
+    else:
+        return jsonify({'error' : f'Produto com id: {product_id}- Não encontrado!'})
 
 # RF: O sistema deve permitir a atualização de um único produto e produto existente
 @main_bp.route('/product/<int:product_id>', methods=['PUT'])

@@ -1,9 +1,12 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, current_app
 from app.modelos.user import LoginPayLoad
 from pydantic import ValidationError
 from app import db
 from bson import ObjectId
 from app.modelos.products import *
+from app.decorators import token_required
+from datetime import datetime, timedelta, timezone
+import jwt
 
 '''
 Blueprint é uma forma de organizar rotas em módulos separados dentro do projeto Flask.
@@ -22,12 +25,21 @@ def login():
     except ValidationError as e:
         return jsonify({'error' : e.errors()}), 400
     except Exception as e:
-        jsonify({'error' : 'Erro durante a requisição do dado'}), 500
+        jsonify({'error' : 'Corpo da requisição inválido ou não é um JSON'})
     
-    if user_data.username == 'admin' and user_data.password == '1234':
-        return jsonify({'mensagem' : 'Login bem-sucedido!'})
-    else:
-        return jsonify({'mensagem' : 'Credenciais Inválidas!'})
+    if user_data.username == 'admin' and user_data.password == 'supersecret':
+        token = jwt.encode(
+            {
+                "user_id" : user_data.username,
+                "exp" : datetime.now(timezone.utc) + timedelta(minutes=30)
+            },
+            current_app.config['SECRET_KEY'],
+            algorithm='HS256'
+        )
+        return jsonify({'access_token': token}), 200
+
+    
+    return jsonify({'error' : 'Credenciais Inválidas!'}), 401
         
 
 # RF :O sistema deve permitir listagem de todos os produtos
@@ -35,27 +47,36 @@ def login():
 def get_products():
     products_cursor = db.products.find({})
     products_list = [ProductDBModel(**product).model_dump(by_alias=True, exclude_none=True) for product in products_cursor]
-    
     return jsonify(products_list)
 
 # RF: O sistema deve permitir a criação de um novo produto
 @main_bp.route('/products', methods=['POST'])
-def create_products():
-    return jsonify({'mensagem' : 'Está é a rota de criação de produtos'})
+@token_required
+
+def create_product(token):
+    try:
+        product = Product(**request.get_json())
+    except ValidationError as e:
+        return jsonify({"error" : e.errors()})
+    
+    result = db.products.insert_one(product.model_dump())
+    return jsonify({'mensagem' : 'Está é a rota de criação de produto',
+                    "id" : str(result.inserted_id)}), 201
 
 # RF: O sistema deve permitir a visualização dos detalhes de um único produto
 @main_bp.route('/product/<string:product_id>', methods=['GET'])
 def get_product_by_id(product_id):
+    print(product_id)
     try:
         oid = ObjectId(product_id)
     except Exception as e:
-        return jsonify({'error' : f'Erro ao transformar  {product_id} em ObjectID: {e}'})
+        return jsonify({'error' : f'Erro ao transformar o {product_id} em ObjectID: {e}'})
     
     product = db.products.find_one({'_id':oid})
     
     if product:
-        product['_id'] = str(product['_id'] )
-        return jsonify(product)
+        product_model = ProductDBModel(**product).model_dump(by_alias=True, exclude_none=True)
+        return jsonify(product_model)
     else:
         return jsonify({'error' : f'Produto com id: {product_id}- Não encontrado!'})
 
